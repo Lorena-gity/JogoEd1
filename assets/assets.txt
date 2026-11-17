@@ -1,1 +1,11 @@
+Fundo_menu.jpeg
+Lavlor.png
+botoes/continuar-hover.png
+botoes/continuar.png
+botoes/jogar-hover.png
+botoes/jogar.png
+botoes/ranking-hover.png
+botoes/ranking.png
+botoes/sair-hover.png
+botoes/sair.png
 libgdx.png
