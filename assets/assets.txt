@@ -9,3 +9,4 @@ botoes/ranking.png
 botoes/sair-hover.png
 botoes/sair.png
 libgdx.png
+mapa1.jpeg
