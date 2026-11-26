@@ -8,6 +8,7 @@ import com.badlogic.gdx.math.Rectangle;
 import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
+import com.badlogic.gdx.audio.Sound;
 
 public class MenuScreen extends ScreenAdapter {
     private static final float LARGURA = 1376;
@@ -30,6 +31,12 @@ public class MenuScreen extends ScreenAdapter {
     private final Rectangle[] areas = new Rectangle[NOMES.length];
     private final Vector2 mouse = new Vector2();
 
+    private final Sound somHover;
+    private final Sound somClick;
+
+    // Controle do hover
+    private final boolean[] estavaSobre = new boolean[NOMES.length];
+
     // animação
     private final float[] offsetY = new float[NOMES.length];
     private final float[] escala = new float[NOMES.length];
@@ -39,13 +46,16 @@ public class MenuScreen extends ScreenAdapter {
         this.game = game;
         batch = new SpriteBatch();
         viewport = new FitViewport(LARGURA, ALTURA);
-        fundo = new Texture("Fundo_menu.jpeg");
-        titulo = new Texture("Lavlor.png");
+        fundo = new Texture("menu/Fundo_menu.jpeg");
+        titulo = new Texture("menu/Lavlor.png");
+
+        somHover = Gdx.audio.newSound(Gdx.files.internal("menu/audio/hover.mp3"));
+        somClick = Gdx.audio.newSound(Gdx.files.internal("menu/audio/click.mp3"));
 
         float x = (LARGURA - BTN_W) / 2f;
         for (int i = 0; i < NOMES.length; i++) {
-            normal[i] = new Texture("botoes/" + NOMES[i] + ".png");
-            hover[i] = new Texture("botoes/" + NOMES[i] + "-hover.png");
+            normal[i] = new Texture("menu/botoes/" + NOMES[i] + ".png");
+            hover[i] = new Texture("menu/botoes/" + NOMES[i] + "-hover.png");
             float y = PRIMEIRO_Y - i * (BTN_H + ESPACO);
             areas[i] = new Rectangle(x, y, BTN_W, BTN_H);
             escala[i] = 1f;
@@ -73,7 +83,16 @@ public class MenuScreen extends ScreenAdapter {
         for (int i = 0; i < NOMES.length; i++) {
             boolean sobre = areas[i].contains(mouse);
 
-            if (sobre && Gdx.input.justTouched()) pressionado = i;
+            if (sobre && !estavaSobre[i]) { // toca o som apenas quando o mouse entra no botão
+                somHover.play();
+            }
+
+            estavaSobre[i] = sobre; // atualiza o estado do hover
+
+            if (sobre && Gdx.input.justTouched()) {
+                pressionado = i;
+                somClick.play();
+            }
             boolean apertado = pressionado == i && sobre && Gdx.input.isTouched();
 
             // o clique só "vale" quando o botão do mouse é solto em cima dele
@@ -105,7 +124,7 @@ public class MenuScreen extends ScreenAdapter {
                 Gdx.app.exit();
                 break;
             case "jogar":
-                game.setScreen(new GameScreen(game));
+                game.setScreen(new CutsceneScreen(game));
                 break;
             default:
                 System.out.println("Clicou em " + NOMES[i]); // ainda não existe essa tela
@@ -122,6 +141,9 @@ public class MenuScreen extends ScreenAdapter {
         batch.dispose();
         fundo.dispose();
         titulo.dispose();
+
+        somHover.dispose();
+        somClick.dispose();
         for (int i = 0; i < NOMES.length; i++) {
             normal[i].dispose();
             hover[i].dispose();
