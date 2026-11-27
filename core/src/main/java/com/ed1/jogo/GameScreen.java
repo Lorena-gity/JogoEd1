@@ -1,7 +1,6 @@
 package com.ed1.jogo;
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.Input;
-import com.badlogic.gdx.Screen;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Color;
 import com.badlogic.gdx.graphics.OrthographicCamera;
@@ -9,69 +8,253 @@ import com.badlogic.gdx.graphics.Pixmap;
 import com.badlogic.gdx.graphics.Texture;
 import com.badlogic.gdx.graphics.g2d.BitmapFont;
 import com.badlogic.gdx.graphics.g2d.SpriteBatch;
+import com.badlogic.gdx.graphics.g2d.TextureRegion;
 import com.badlogic.gdx.math.MathUtils;
+import com.badlogic.gdx.math.Vector2;
 import com.badlogic.gdx.utils.Align;
 import com.badlogic.gdx.utils.ScreenUtils;
 import com.badlogic.gdx.utils.viewport.FitViewport;
-import com.ed1.jogo.dialogo.CaixaDialogo;
-import com.ed1.jogo.entidades.Fantasma;
-import com.ed1.jogo.entidades.Gato;
-import com.ed1.jogo.fases.Fase;
-import com.ed1.jogo.fases.Fases;
-import com.ed1.jogo.fases.Plataforma;
-import com.ed1.jogo.itens.Coletavel;
 
 public class GameScreen extends ScreenAdapter {
-    private static final float ZOOM = 1.5f;
-    private static final float HUD_W = 1376, HUD_H = 768;
-    private static final float VIEW_W = HUD_W / ZOOM;
-    private static final float VIEW_H = HUD_H / ZOOM;
-    private static final float TEMPO_APARECER = 3f; // fade-in da intro (segundos)
+    private static final int TOTAL_FASES = 2;
 
-    private enum Estado { INTRO, JOGANDO, FINAL }
+    // Plataformas: {x da esquerda, x da direita, y do TOPO}, y contado DE CIMA da imagem.
+    // Com 4 números, o último é a BASE: vira um pilar sólido (bloqueia dos lados e por baixo).
+    // --------------------------- FASE 1 ---------------------------
+    private static final String MAPA_1 = "mapas/mapa1.png";
+    private static final float MAPA_1_W = 1675;
+    private static final float MAPA_1_H = 939;
+    private static final float[][] PLATAFORMAS_1 = {
+            {   0,  322, 452}, // A: onde o gato começa (perto da porta)
+            { 338,  494, 572}, // B
+            { 210,  337, 746}, // C (embaixo, à esquerda)
+            { 578,  716, 481}, // D
+            { 735,  893, 330}, // E (o pilar alto do meio)
+            { 872, 1025, 519}, // F
+            { 656,  828, 664}, // G (embaixo)
+            {1065, 1172, 416}, // H
+            {1036, 1206, 666}, // I (embaixo)
+            {1258, 1423, 432}, // J
+            {1332, 1466, 752}, // K (embaixo, à direita)
+            {1425, 1506, 328}, // L1
+            {1506, 1675, 338}, // L2: a plataforma da chegada
+    };
+    private static final float INICIO_1_X = 110;
+    private static final float INICIO_1_Y = 452;
+    private static final float CHEGADA_1_X = 1560;
+    // coletáveis: {x do CENTRO, y do CENTRO (contado de cima), pontos}
+    private static final float[][] COLETAVEIS_1 = {
+            {814, 285, 2000}, // em cima do pilar alto do meio
+    };
+
+    // --------------------------- FASE 2 ---------------------------
+    private static final String MAPA_2 = "mapas/mapa2.png";
+    private static final float MAPA_2_W = 1676;
+    private static final float MAPA_2_H = 938;
+    private static final float H2 = 938; // base = H2 -> o pilar vai até o chão
+    private static final float[][] PLATAFORMAS_2 = {
+            {  40,  298, 392},      // A: onde o gato começa (porta da esquerda)
+            { 320,  373, 452, H2},  // pilarzinho 1 (sólido)
+            { 400,  462, 500, H2},  // pilarzinho 2 (sólido)
+            { 507,  565, 548, H2},  // pilarzinho 3 (sólido)
+            { 583,  668, 390},      // plataforma pendurada (baixa)
+            { 475,  555, 338},      // plataforma pendurada (média)
+            { 545,  592, 287},      // plataforma pendurada (pequena)
+            { 645,  757, 592},      // degrau na base do pilar grande
+            { 755,  885, 255, H2},  // pilar grande 1 (sólido)
+            { 885,  943, 380},      // degrau entre os pilares (alto)
+            { 885,  943, 490},      // degrau entre os pilares (meio)
+            { 965, 1035, 305},      // degrau à esquerda do pilar 2 (alto)
+            { 965, 1035, 590},      // degrau à esquerda do pilar 2 (baixo)
+            { 880, 1040, 735},      // chão entre os pilares (embaixo)
+            {1035, 1137, 268, H2},  // pilar grande 2 (sólido)
+            {1168, 1230, 252},      // plataforma flutuante 1
+            {1280, 1340, 225},      // plataforma flutuante 2
+            {1380, 1640, 205},      // porta da caveira: chegada
+    };
+    private static final float INICIO_2_X = 130;
+    private static final float INICIO_2_Y = 392;
+    private static final float CHEGADA_2_X = 1500;
+    private static final float[][] COLETAVEIS_2 = {};
+
+    // ---------------- LÓGICA FÍSICA ----------------
+    private static final float GRAVIDADE = 1800;
+    private static final float FORCA_PULO = 850;
+    private static final float VELOCIDADE = 220;
+    private static final float SOLTOU_PULO = 2.5f;
+    private static final float VEL_QUEDA_MAX = 1300;
+    private static final float TEMPO_COYOTE = 0.10f;
+    private static final float TEMPO_BUFFER = 0.10f;
+    private static final float HITBOX_W = 30;
+    private static final float HITBOX_H = 56; // altura do gato nas colisões com pilares
+
+    private static final float ZOOM = 1.5f;
+    private static final float VIEW_W = 1376 / ZOOM;
+    private static final float VIEW_H = 768 / ZOOM;
+
+    // 11 quadros lado a lado, cada um com 45x40 pixels:
+    // 0-5 caminhada | 6 agachado | 7 subindo | 8 topo do pulo | 9 caindo | 10 parado (sobra)
+    private static final int CELULA_W = 45;
+    private static final int CELULA_H = 40;
+    private static final int CENTRO_X = 26;
+    private static final int ESCALA = 2;
+    private static final int Q_AGACHADO = 6, Q_SUBINDO = 7, Q_TOPO = 8, Q_CAINDO = 9;
+    private static final int[] ORDEM_ANDAR = {0, 1, 2, 3, 4, 5, 4, 3, 2, 1};
+    private static final float TEMPO_QUADRO = 0.04f;
+
+    // ---------------- FANTASMINHA ----------------
+    private static final float FANTASMA_W = 112;
+    private static final float FANTASMA_H = FANTASMA_W * 505f / 758f;
+    private static final float VEL_DESCIDA = 180;
+    private static final float LETRAS_POR_SEGUNDO = 30;
+    private static final float VEL_VOO = 350; // velocidade dele indo esperar o gato
+    // onde o fantasminha espera na fase 1 (x = canto esquerdo, y = topo da plataforma, contado de cima)
+    private static final float ESPERA_1_X = 1575;
+    private static final float ESPERA_1_Y = 338;
+
+    // ---------------- COLETÁVEL ----------------
+    private static final float COLETAVEL_ALTURA = 44;
+
+    /** Um item coletável. Só guarda dados; o GameScreen cuida do resto. */
+    private static class Coletavel {
+        final float x, y; // centro, y contado DE CIMA da imagem
+        final int pontos;
+        boolean pego = false;
+
+        Coletavel(float x, float y, int pontos) {
+            this.x = x;
+            this.y = y;
+            this.pontos = pontos;
+        }
+    }
 
     private final Main game;
-    private final Fase fase;
-
-    private final SpriteBatch batch = new SpriteBatch();
-    private final OrthographicCamera camera = new OrthographicCamera();
-    private final FitViewport viewport = new FitViewport(VIEW_W, VIEW_H, camera);
-    private final OrthographicCamera hud = new OrthographicCamera();
+    private final int fase;
+    private final SpriteBatch batch;
+    private final OrthographicCamera camera;
+    private final FitViewport viewport;
+    private final OrthographicCamera hud;
     private final Texture mapa;
-    private final Texture pixel;
-    private final BitmapFont fonte = new BitmapFont();
+    private final Texture gato;
+    private final TextureRegion[] quadros;
+    private final BitmapFont fonte;
 
-    private final Gato gato = new Gato();
-    private final Fantasma fantasma = new Fantasma();
-    private CaixaDialogo dialogo;
+    // dados da fase atual
+    private final float mapaW, mapaH;
+    private final ListaEncadeada<Plataforma> plataformas;
+    private final ListaEncadeada<Coletavel> coletaveis;
+    private final float inicioX, inicioY, chegadaX;
 
-    private Estado estado;
-    private float tempoIntro = 0;
+    private final Vector2 pos = new Vector2();
+    private final Vector2 vel = new Vector2();
+    private boolean noChao = false;
+    private boolean olhandoDireita = true;
+    private boolean andando = false;
+    private float tempoCoyote = 0;
+    private float bufferPulo = 0;
+    private float tempoPouso = 0;
+    private float tempoAnim = 0;
     private float tempoTotal = 0;
-    private float alfaIntro = 1;
-    private boolean debug = false;       // F1 mostra as caixas de colisão
-    private Screen proximaTela = null;   // se != null, troca de tela no fim do frame
+    private boolean venceu = false;
+    private boolean debug = false; // F1 mostra as caixas de colisão
 
+    // pontos e coletável
     private int pontos;
     private int ultimoGanho = 0;
-    private float tempoGanho = 0;   // quanto tempo o "+2000" fica na tela
+    private float tempoGanho = 0;
+    private final Texture texColetavel;
+    private final float coletavelW;
+    private float tempoColetavel = 0;
+
+    // fantasminha + diálogo
+    private final Texture fantasma;
+    private final Texture pixel;
+    private final Fila<String> falasIntro = new Fila<>(); // antes da fase
+    private final Fila<String> falasFim = new Fila<>();   // quando o gato chega no fim
+    private final boolean temFim;
+    private Fila<String> falas;       // a fila que está sendo falada agora
+    private String falaAtual = null;
+    private float tempoFala = 0;
+    private float fantasmaX, fantasmaY, fantasmaAlvoY;
+    private float tempoFlutuar = 0;
+    private boolean fantasmaChegou = false;
+    private boolean fantasmaSaindo = false;
+
+    // introdução (gato e fantasminha aparecendo devagar)
+    private boolean introAtiva = false;
+    private float alfaIntro = 0;
+
+    private float tempoEntrada = 0;
+    private static final float DURACAO_ENTRADA_GATO = 1.5f;
+    private static final float DURACAO_ENTRADA_FANTASMA = 1.5f;
+    private static final float ATRASO_FANTASMA = 0.8f;
+
+    private boolean fantasmaIndoEsperar = false;
+    private boolean fantasmaEsperando = false;
+    private float esperaX, esperaY;
 
     public GameScreen(Main game) {
         this(game, 1, 0);
     }
 
-    public GameScreen(Main game, int numeroFase, int pontos) {
+    public GameScreen(Main game, int fase, int pontos) {
         this.game = game;
+        this.fase = fase;
         this.pontos = pontos;
-        this.fase = Fases.criar(numeroFase);
 
-        hud.setToOrtho(false, HUD_W, HUD_H);
+        if (fase == 2) {
+            mapaW = MAPA_2_W;
+            mapaH = MAPA_2_H;
+            plataformas = montarPlataformas(PLATAFORMAS_2);
+            coletaveis = montarColetaveis(COLETAVEIS_2);
+            inicioX = INICIO_2_X;
+            inicioY = INICIO_2_Y;
+            chegadaX = CHEGADA_2_X;
+            // início da fase 2: só se despede
+            falasIntro.enfileirar("Adeus e boa sorte na sua jornada!");
+        } else {
+            mapaW = MAPA_1_W;
+            mapaH = MAPA_1_H;
+            plataformas = montarPlataformas(PLATAFORMAS_1);
+            coletaveis = montarColetaveis(COLETAVEIS_1);
+            inicioX = INICIO_1_X;
+            inicioY = INICIO_1_Y;
+            chegadaX = CHEGADA_1_X;
+            // início da fase 1: pede o favor
+            falasIntro.enfileirar("Faz um favor pra mim? Pega os coletáveis da fase e traz pra mim?");
+            falasIntro.enfileirar("Eu te espero do outro lado..");
+            esperaX = ESPERA_1_X;
+            esperaY = ESPERA_1_Y;
+            // fim da fase 1: agradece e decide ajudar
+            falasFim.enfileirar("Muito obrigada! Você é muito gentil!");
+            falasFim.enfileirar("Para onde está indo?");
+            falasFim.enfileirar("Vou te ajudar no caminho, vamos!");
+        }
+        temFim = !falasFim.estaVazia();
 
-        mapa = new Texture(fase.mapa);
+        batch = new SpriteBatch();
+        camera = new OrthographicCamera();
+        viewport = new FitViewport(VIEW_W, VIEW_H, camera);
+        hud = new OrthographicCamera();
+        hud.setToOrtho(false, 1376, 768);
+
+        mapa = new Texture(fase == 2 ? MAPA_2 : MAPA_1);
         mapa.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
+        gato = new Texture("gato_parkour.png");
+        gato.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        quadros = TextureRegion.split(gato, CELULA_W, CELULA_H)[0];
+
+        texColetavel = new Texture("itens/cristal_estrela.png");
+        texColetavel.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        coletavelW = COLETAVEL_ALTURA * texColetavel.getWidth() / texColetavel.getHeight();
+
+        fonte = new BitmapFont();
         fonte.getData().setScale(2.5f);
         fonte.getRegion().getTexture().setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear);
+
+        fantasma = new Texture("fantasminha.png");
+        fantasma.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
 
         Pixmap pm = new Pixmap(1, 1, Pixmap.Format.RGBA8888);
         pm.setColor(Color.WHITE);
@@ -79,115 +262,145 @@ public class GameScreen extends ScreenAdapter {
         pixel = new Texture(pm);
         pm.dispose();
 
-        gato.reiniciar(fase);
+        reiniciar();
 
-        if (fase.temIntro()) {
-            estado = Estado.INTRO;
-            alfaIntro = 0;
-            gato.ficarParado();
-            fantasma.aparecerParado(fase.inicioX + 60, (fase.altura - fase.inicioY) + 55);
-            dialogo = new CaixaDialogo(fase.falasIntro);
+        // toda fase começa com a intro: gato parado, fantasminha ao lado
+        introAtiva = true;
+        noChao = true;
+        falas = falasIntro;
+
+        // fase 1 aparece normalmente; fase 2 começa com fade-in
+        alfaIntro = (fase == 2) ? 0 : 1;
+        if (fase == 1) {
+            // fase 1: o fantasminha desce do céu
+            float camY = MathUtils.clamp(mapaH - inicioY + 30, VIEW_H / 2f, mapaH - VIEW_H / 2f);
+            fantasmaX = inicioX + 60;
+            fantasmaY = camY + VIEW_H / 2f;          // começa acima da tela
+            fantasmaAlvoY = (mapaH - inicioY) + 55;
         } else {
-            estado = Estado.JOGANDO;
+            // fase 2: o fantasma começa invisível e aparece gradualmente
+            fantasmaX = inicioX + 60;
+            fantasmaY = (mapaH - inicioY) + 55;
+            fantasmaChegou = false;
         }
+    }
+
+    private void atualizarEntrada(float dt) {
+        tempoEntrada += dt;
+
+        // gato aparece primeiro
+        alfaIntro = MathUtils.clamp(
+                tempoEntrada / DURACAO_ENTRADA_GATO, 0, 1
+        );
+
+        // fantasma começa a aparecer um pouquinho depois
+        float tempoFantasma = tempoEntrada - ATRASO_FANTASMA;
+
+        float alfaFantasma = MathUtils.clamp(
+                tempoFantasma / DURACAO_ENTRADA_FANTASMA, 0, 1
+        );
+
+        if (tempoFantasma >= DURACAO_ENTRADA_FANTASMA && !fantasmaChegou) {
+            fantasmaChegou = true;
+            falaAtual = falas.desenfileirar();
+            tempoFala = 0;
+        }
+    }
+
+    /** Transforma a tabela de números numa lista encadeada de Plataforma. */
+    private static ListaEncadeada<Plataforma> montarPlataformas(float[][] tabela) {
+        ListaEncadeada<Plataforma> lista = new ListaEncadeada<>();
+        for (float[] p : tabela) {
+            lista.adicionar(p.length > 3
+                    ? new Plataforma(p[0], p[1], p[2], p[3])
+                    : new Plataforma(p[0], p[1], p[2]));
+        }
+        return lista;
+    }
+
+    private static ListaEncadeada<Coletavel> montarColetaveis(float[][] tabela) {
+        ListaEncadeada<Coletavel> lista = new ListaEncadeada<>();
+        for (float[] c : tabela) {
+            lista.adicionar(new Coletavel(c[0], c[1], (int) c[2]));
+        }
+        return lista;
+    }
+
+    /** Volta o gato pro começo (usado no início e quando ele cai no buraco). */
+    private void reiniciar() {
+        pos.set(inicioX, mapaH - inicioY);
+        vel.set(0, 0);
+        noChao = false;
+        olhandoDireita = true;
+        tempoCoyote = 0;
+        bufferPulo = 0;
+        tempoPouso = 0;
     }
 
     @Override
     public void render(float delta) {
         delta = Math.min(delta, 1 / 30f);
-        if (estado != Estado.INTRO) tempoTotal += delta;
-
-        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) debug = !debug;
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) proximaTela = new MenuScreen(game);
-        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) apertouEnter();
-
-        switch (estado) {
-            case INTRO:   atualizarIntro(delta);   break;
-            case JOGANDO: atualizarJogo(delta);    break;
-            case FINAL:   atualizarFinal(delta);   break;
-        }
-        fantasma.atualizar(delta, fase.altura);
-        for (Coletavel c : fase.coletaveis) c.atualizar(delta);
+        if (!introAtiva) tempoTotal += delta;
+        tempoColetavel += delta;
         tempoGanho = Math.max(0, tempoGanho - delta);
 
-        if (proximaTela != null) {
-            game.setScreen(proximaTela);
+        if (Gdx.input.isKeyJustPressed(Input.Keys.F1)) debug = !debug;
+
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ESCAPE)) {
+            game.setScreen(new MenuScreen(game));
             dispose();
             return;
         }
 
-        desenhar();
-    }
-
-    // ======================= ESTADOS =======================
-
-    private void apertouEnter() {
-        if (estado == Estado.INTRO) {
-            dialogo.avancar();
-            if (dialogo.terminou()) {       // acabou a última fala: ele vai embora
-                estado = Estado.JOGANDO;
-                fantasma.sair();
-            }
-        } else if (estado == Estado.FINAL) {
-            boolean falando = dialogo != null && !dialogo.terminou();
-            if (falando) {
-                dialogo.avancar();
-                if (dialogo.terminou() && !fase.ultima()) irParaProximaFase();
-            } else if (fase.ultima()) {
-                proximaTela = new MenuScreen(game);
-            }
-        }
-    }
-
-    private void atualizarIntro(float dt) {
-        tempoIntro += dt;
-        alfaIntro = MathUtils.clamp(tempoIntro / TEMPO_APARECER, 0, 1);
-        fantasma.setAlfa(alfaIntro);
-
-        if (alfaIntro >= 1 && !dialogo.iniciada()) dialogo.comecar(); // fade-in acabou: ele fala
-        dialogo.atualizar(dt);
-    }
-
-    private void atualizarJogo(float dt) {
-        gato.atualizar(dt, fase);
-        for (Coletavel c : fase.coletaveis) {
-            if (c.tentarPegar(gato.pos, fase.altura)) {
-                pontos += c.pontos;
-                ultimoGanho = c.pontos;
-                tempoGanho = 1.5f;
+        if (Gdx.input.isKeyJustPressed(Input.Keys.ENTER)) {
+            if (venceu) {
+                if (temFim) {
+                    avancarDialogo();
+                    if (dialogoTerminou()) { // última fala acabou: vai direto pra próxima fase
+                        game.setScreen(new GameScreen(game, fase + 1, pontos));
+                        dispose();
+                        return;
+                    }
+                } else {
+                    // fase sem fala final: ENTER vai pra próxima fase (ou pro menu, se for a última)
+                    if (fase < TOTAL_FASES) game.setScreen(new GameScreen(game, fase + 1, pontos));
+                    else game.setScreen(new MenuScreen(game));
+                    dispose();
+                    return;
+                }
+            } else if (introAtiva) {
+                avancarDialogo();
+                if (dialogoTerminou()) { // acabou a última fala
+                    introAtiva = false;
+                    if (fase == 1) fantasmaIndoEsperar = true; // voa pro outro lado
+                    else fantasmaSaindo = true;                // se despede e sai
+                }
             }
         }
-        if (gato.chegou()) terminarFase();
-    }
 
-    private void terminarFase() {
-        estado = Estado.FINAL;
-        if (fase.falasFim.tamanho() > 0) {
-            // o fantasminha nasce acima da tela e desce até ficar ao lado do gato
-            fantasma.entrarDescendo(Math.max(0, gato.pos.x - 140),
-                    camera.position.y + VIEW_H / 2f, gato.pos.y + 55);
-            dialogo = new CaixaDialogo(fase.falasFim);
-        } else if (!fase.ultima()) {
-            irParaProximaFase();
+        if (introAtiva) {
+            if (fase == 2) {
+                atualizarEntrada(delta);
+                tempoFlutuar += delta;
+
+                if (fantasmaChegou && falaAtual != null) {
+                    tempoFala += delta;
+                }
+            } else {
+                atualizarFantasma(delta);
+            }
+        } else if (!venceu) {
+            atualizar(delta);
+        } else if (temFim) {
+            atualizarFantasma(delta);
         }
-    }
+        if (fantasmaSaindo) atualizarSaidaFantasma(delta);
+        if (fantasmaIndoEsperar) atualizarVooAteEspera(delta);
+        if (fantasmaEsperando && !venceu) tempoFlutuar += delta;
 
-    private void atualizarFinal(float dt) {
-        if (dialogo == null) return;
-        if (fantasma.parado() && !dialogo.iniciada()) dialogo.comecar();
-        dialogo.atualizar(dt);
-    }
-
-    private void irParaProximaFase() {
-        proximaTela = new GameScreen(game, fase.numero + 1, pontos);
-    }
-
-    // ======================= DESENHO =======================
-
-    private void desenhar() {
-        // câmera: segue o gato, mas nunca sai do mapa
-        float camX = MathUtils.clamp(gato.pos.x, VIEW_W / 2f, fase.largura - VIEW_W / 2f);
-        float camY = MathUtils.clamp(gato.pos.y + 30, VIEW_H / 2f, fase.altura - VIEW_H / 2f);
+        // ---------- câmera: segue o gato, mas nunca sai do mapa ----------
+        float camX = MathUtils.clamp(pos.x, VIEW_W / 2f, mapaW - VIEW_W / 2f);
+        float camY = MathUtils.clamp(pos.y + 30, VIEW_H / 2f, mapaH - VIEW_H / 2f);
         camera.position.set(Math.round(camX), Math.round(camY), 0);
         camera.update();
 
@@ -196,56 +409,350 @@ public class GameScreen extends ScreenAdapter {
 
         batch.setProjectionMatrix(camera.combined);
         batch.begin();
-        batch.draw(mapa, 0, 0, fase.largura, fase.altura);
-        for (Coletavel c : fase.coletaveis) c.desenhar(batch, fase.altura);
-        gato.desenhar(batch, alfaIntro);
-        if (fantasma.visivel()) fantasma.desenhar(batch);
+        batch.draw(mapa, 0, 0, mapaW, mapaH);
+        desenharColetaveis();
+        desenharGato();
+        if (introAtiva || fantasmaSaindo || fantasmaIndoEsperar || fantasmaEsperando) desenharFantasma();
         if (debug) desenharDebug();
         batch.end();
 
         desenharTextos();
     }
 
+    // ---------------- LÓGICA DO GATO ----------------
+
+    private void atualizar(float dt) {
+        // ---------- entrada ----------
+        float dir = 0;
+        if (Gdx.input.isKeyPressed(Input.Keys.A) || Gdx.input.isKeyPressed(Input.Keys.LEFT)) dir -= 1;
+        if (Gdx.input.isKeyPressed(Input.Keys.D) || Gdx.input.isKeyPressed(Input.Keys.RIGHT)) dir += 1;
+
+        boolean pulaApertou = Gdx.input.isKeyJustPressed(Input.Keys.W)
+                || Gdx.input.isKeyJustPressed(Input.Keys.UP)
+                || Gdx.input.isKeyJustPressed(Input.Keys.SPACE);
+        boolean pulaSegurando = Gdx.input.isKeyPressed(Input.Keys.W)
+                || Gdx.input.isKeyPressed(Input.Keys.UP)
+                || Gdx.input.isKeyPressed(Input.Keys.SPACE);
+
+        andando = dir != 0;
+        if (dir != 0) olhandoDireita = dir > 0;
+        vel.x = dir * VELOCIDADE;
+
+        // ---------- pulo (com "coyote time" e "buffer") ----------
+        tempoCoyote = noChao ? TEMPO_COYOTE : tempoCoyote - dt;
+        bufferPulo = pulaApertou ? TEMPO_BUFFER : bufferPulo - dt;
+        if (bufferPulo > 0 && tempoCoyote > 0) {
+            vel.y = FORCA_PULO;
+            noChao = false;
+            tempoCoyote = 0;
+            bufferPulo = 0;
+        }
+
+        // ---------- gravidade ----------
+        float g = (vel.y > 0 && !pulaSegurando) ? GRAVIDADE * SOLTOU_PULO : GRAVIDADE;
+        vel.y = Math.max(vel.y - g * dt, -VEL_QUEDA_MAX);
+
+        // ---------- mover X e bater nas paredes dos pilares ----------
+        float xAntes = pos.x;
+        pos.x = MathUtils.clamp(pos.x + vel.x * dt, 20, mapaW - 20);
+        for (Plataforma p : plataformas) {
+            if (!p.solida) continue;
+            float topo = mapaH - p.y;
+            float base = mapaH - p.yBase;
+            // "topo - 2": quem está EM CIMA do pilar não conta como batendo na parede
+            boolean sobrepoeY = pos.y < topo - 2 && pos.y + HITBOX_H > base;
+            if (sobrepoeY && sobrepoeX(p)) {
+                if (pos.x > xAntes) pos.x = p.x0 - HITBOX_W / 2f;
+                else if (pos.x < xAntes) pos.x = p.x1 + HITBOX_W / 2f;
+            }
+        }
+
+        // ---------- mover Y e bater a cabeça por baixo dos pilares ----------
+        float yAntes = pos.y;
+        pos.y += vel.y * dt;
+        if (vel.y > 0) {
+            for (Plataforma p : plataformas) {
+                if (!p.solida || !sobrepoeX(p)) continue;
+                float base = mapaH - p.yBase;
+                if (yAntes + HITBOX_H <= base + 0.5f && pos.y + HITBOX_H > base) {
+                    pos.y = base - HITBOX_H;
+                    vel.y = 0;
+                }
+            }
+        }
+
+        // ---------- pousar nas plataformas ----------
+        boolean estavaNoChao = noChao;
+        float velQueda = vel.y;
+        noChao = false;
+        if (vel.y <= 0) {
+            float melhorTopo = -1;
+            for (Plataforma p : plataformas) {   // percorre a lista encadeada, nó por nó
+                float topo = mapaH - p.y;
+                boolean atravessouPraBaixo = yAntes >= topo - 0.5f && pos.y <= topo;
+                if (sobrepoeX(p) && atravessouPraBaixo && topo > melhorTopo) {
+                    melhorTopo = topo;
+                }
+            }
+            if (melhorTopo >= 0) {
+                pos.y = melhorTopo;
+                vel.y = 0;
+                noChao = true;
+                if (!estavaNoChao && velQueda < -350) {
+                    tempoPouso = 0.07f;
+                }
+            }
+        }
+
+        // ---------- caiu no buraco ----------
+        if (pos.y < -100) {
+            reiniciar();
+        }
+
+        // ---------- coletáveis ----------
+        for (Coletavel c : coletaveis) {
+            if (c.pego) continue;
+            float cy = mapaH - c.y;
+            boolean encostou =
+                    pos.x + HITBOX_W / 2f > c.x - coletavelW / 2f
+                            && pos.x - HITBOX_W / 2f < c.x + coletavelW / 2f
+                            && pos.y + HITBOX_H > cy - COLETAVEL_ALTURA / 2f
+                            && pos.y < cy + COLETAVEL_ALTURA / 2f;
+            if (encostou) {
+                c.pego = true;
+                pontos += c.pontos;
+                ultimoGanho = c.pontos;
+                tempoGanho = 1.5f;
+            }
+        }
+
+        // ---------- chegada ----------
+        if (noChao && pos.x >= chegadaX) {
+            venceu = true;
+            vel.set(0, 0);
+            andando = false;
+
+            if (temFim) {
+                // o fantasminha já está esperando aqui: é só ele começar a falar
+                falas = falasFim;
+                fantasmaIndoEsperar = false;
+                fantasmaEsperando = true;
+                fantasmaX = esperaX;
+                fantasmaY = (mapaH - esperaY) + 55;
+                fantasmaChegou = true;
+                falaAtual = falas.desenfileirar();
+                tempoFala = 0;
+            }
+        }
+
+        // ---------- tempos da animação ----------
+        tempoPouso = Math.max(0, tempoPouso - dt);
+        if (andando && noChao) {
+            tempoAnim += dt;
+        } else {
+            tempoAnim = 0;
+        }
+    }
+
+    private boolean sobrepoeX(Plataforma p) {
+        return pos.x + HITBOX_W / 2f > p.x0 && pos.x - HITBOX_W / 2f < p.x1;
+    }
+
+    // ---------------- INTRO ----------------
+
+    private void atualizarVooAteEspera(float dt) {
+        tempoFlutuar += dt;
+        float alvoX = esperaX;
+        float alvoY = (mapaH - esperaY) + 55;
+        float dx = alvoX - fantasmaX, dy = alvoY - fantasmaY;
+        float dist = (float) Math.sqrt(dx * dx + dy * dy);
+        float passo = VEL_VOO * dt;
+        if (dist <= passo) {
+            fantasmaX = alvoX;
+            fantasmaY = alvoY;
+            fantasmaIndoEsperar = false;
+            fantasmaEsperando = true;
+        } else {
+            fantasmaX += dx / dist * passo;
+            fantasmaY += dy / dist * passo;
+        }
+    }
+
+    private void atualizarSaidaFantasma(float dt) {
+        tempoFlutuar += dt;
+        fantasmaY += VEL_DESCIDA * 1.2f * dt;   // sai voando pra cima
+        if (fantasmaY > mapaH + 100) {
+            fantasmaSaindo = false;
+        }
+    }
+
+    // ---------------- FANTASMINHA + DIÁLOGO ----------------
+
+    private void atualizarFantasma(float dt) {
+        tempoFlutuar += dt;
+        if (!fantasmaChegou) {
+            fantasmaY -= VEL_DESCIDA * dt;
+            if (fantasmaY <= fantasmaAlvoY) {
+                fantasmaY = fantasmaAlvoY;
+                fantasmaChegou = true;
+                falaAtual = falas.desenfileirar();
+                tempoFala = 0;
+            }
+        } else {
+            tempoFala += dt;
+        }
+    }
+
+    private int letrasVisiveis() {
+        if (falaAtual == null) return 0;
+        return Math.min(falaAtual.length(), (int) (tempoFala * LETRAS_POR_SEGUNDO));
+    }
+
+    private void avancarDialogo() {
+        if (!fantasmaChegou || falaAtual == null) return;
+        if (letrasVisiveis() < falaAtual.length()) {
+            tempoFala = 999;                    // mostra tudo de uma vez
+        } else {
+            falaAtual = falas.desenfileirar();  // próxima fala (null se a fila acabou)
+            tempoFala = 0;
+        }
+    }
+
+    private boolean dialogoTerminou() {
+        return fantasmaChegou && falaAtual == null;
+    }
+
+    // ---------------- DESENHO ----------------
+
+    private int escolherQuadro() {
+        if (!noChao) {
+            if (vel.y > 150) return Q_SUBINDO;
+            if (vel.y < -150) return Q_CAINDO;
+            return Q_TOPO;
+        }
+        if (tempoPouso > 0) return Q_AGACHADO;
+        if (andando) return ORDEM_ANDAR[(int) (tempoAnim / TEMPO_QUADRO) % ORDEM_ANDAR.length];
+        return 0;
+    }
+
+    private void desenharGato() {
+        TextureRegion q = quadros[escolherQuadro()];
+        float w = CELULA_W * ESCALA;
+        float h = CELULA_H * ESCALA;
+        float c = CENTRO_X * ESCALA;
+        float y = Math.round(pos.y);
+
+        batch.setColor(1, 1, 1, alfaIntro);   // fade-in da intro
+        if (olhandoDireita) {
+            batch.draw(q, Math.round(pos.x - c), y, w, h);
+        } else {
+            batch.draw(q, Math.round(pos.x + c), y, -w, h);
+        }
+        batch.setColor(Color.WHITE);
+    }
+
+    private void desenharColetaveis() {
+        float balanco = MathUtils.sin(tempoColetavel * 3f) * 4f; // flutua devagarinho
+        for (Coletavel c : coletaveis) {
+            if (c.pego) continue;
+            batch.draw(texColetavel,
+                    Math.round(c.x - coletavelW / 2f),
+                    Math.round(mapaH - c.y - COLETAVEL_ALTURA / 2f + balanco),
+                    coletavelW, COLETAVEL_ALTURA);
+        }
+    }
+
+    private void desenharFantasma() {
+        float balanco = (fantasmaChegou && !fantasmaSaindo && !fantasmaIndoEsperar)
+                ? MathUtils.sin(tempoFlutuar * 3f) * 5f
+                : MathUtils.sin(tempoFlutuar * 10f) * 3f;
+
+        float alfa = alfaIntro;
+
+        // na fase 2, o fantasma tem seu próprio fade-in
+        if (fase == 2 && introAtiva) {
+            alfa = MathUtils.clamp(
+                    (tempoEntrada - ATRASO_FANTASMA) / DURACAO_ENTRADA_FANTASMA,
+                    0, 1
+            );
+        }
+
+        batch.setColor(1, 1, 1, alfa);
+        batch.draw(fantasma, Math.round(fantasmaX), Math.round(fantasmaY + balanco),
+                FANTASMA_W, FANTASMA_H);
+
+        batch.setColor(Color.WHITE);
+    }
+
     /** F1: vermelho = pilar sólido, verde = topo onde o gato pousa. */
     private void desenharDebug() {
-        for (Plataforma p : fase.plataformas) {
+        for (Plataforma p : plataformas) {
             float w = p.x1 - p.x0;
             if (p.solida) {
                 batch.setColor(1, 0, 0, 0.35f);
-                batch.draw(pixel, p.x0, fase.altura - p.yBase, w, p.yBase - p.y);
+                batch.draw(pixel, p.x0, mapaH - p.yBase, w, p.yBase - p.y);
             }
             batch.setColor(0, 1, 0, 0.9f);
-            batch.draw(pixel, p.x0, fase.altura - p.y - 1, w, 2);
+            batch.draw(pixel, p.x0, mapaH - p.y - 1, w, 2);
         }
         batch.setColor(Color.WHITE);
+    }
+
+    private void desenharCaixaDeFala() {
+        float x = 288, y = 110, w = 800, h = 150;
+
+        batch.setColor(1, 1, 1, 1);                       // borda
+        batch.draw(pixel, x - 4, y - 4, w + 8, h + 8);
+        batch.setColor(0.08f, 0.08f, 0.14f, 0.95f);       // fundo
+        batch.draw(pixel, x, y, w, h);
+        batch.setColor(Color.WHITE);
+
+        fonte.getData().setScale(1.6f);
+        fonte.setColor(1f, 0.8f, 0.2f, 1f);
+        fonte.draw(batch, "Fantasminha", x + 25, y + h - 18);
+
+        fonte.getData().setScale(2.2f);
+        fonte.setColor(Color.WHITE);
+        String texto = falaAtual.substring(0, letrasVisiveis());
+        fonte.draw(batch, texto, x + 25, y + h - 65, w - 50, Align.left, true);
+
+        if (letrasVisiveis() >= falaAtual.length()) {
+            fonte.getData().setScale(1.4f);
+            fonte.setColor(0.7f, 0.7f, 0.7f, 1f);
+            fonte.draw(batch, "ENTER", x + w - 110, y + 35);
+        }
+        fonte.setColor(Color.WHITE);
     }
 
     private void desenharTextos() {
         batch.setProjectionMatrix(hud.combined);
         batch.begin();
+
+        // placar
         fonte.getData().setScale(1.6f);
         fonte.setColor(Color.WHITE);
-        fonte.draw(batch, "Pontos: " + pontos, 30, HUD_H - 25);
+        fonte.draw(batch, "Pontos: " + pontos, 30, 768 - 25);
         if (tempoGanho > 0) {
             fonte.setColor(1f, 0.85f, 0.2f, MathUtils.clamp(tempoGanho, 0, 1));
-            fonte.draw(batch, "+" + ultimoGanho, 30, HUD_H - 70);
+            fonte.draw(batch, "+" + ultimoGanho, 30, 768 - 70);
         }
         fonte.setColor(Color.WHITE);
 
-        if (estado == Estado.JOGANDO && tempoTotal < 7) {
+        if (tempoTotal < 7 && !venceu && !introAtiva) {
             float alfa = MathUtils.clamp(7 - tempoTotal, 0, 1);
             escreverComSombra("A / D: andar     W ou ESPACO: pular     ESC: menu", 60, 1f, alfa);
         }
 
-        if (dialogo != null && dialogo.ativa()) {
-            dialogo.desenhar(batch, fonte, pixel);
+        // fala do fantasminha (fim da fase ou introdução)
+        if ((venceu || introAtiva) && fantasmaChegou && falaAtual != null) {
+            desenharCaixaDeFala();
         }
 
-        // só a ÚLTIMA fase mostra tela de fim; as outras vão direto pra próxima
-        boolean falando = dialogo != null && !dialogo.terminou();
-        if (estado == Estado.FINAL && fase.ultima() && !falando) {
-            escreverComSombra("Fim da fase " + fase.numero + "!", 430, 1.4f, 1f);
-            escreverComSombra("Aperte ENTER pra voltar ao menu", 360, 1f, 1f);
+        // fases com fala final vão direto pra próxima; as outras mostram "Fim da fase"
+        if (venceu && !temFim) {
+            escreverComSombra("Fim da fase " + fase + "!", 430, 1.4f, 1f);
+            escreverComSombra(fase < TOTAL_FASES ? "Aperte ENTER pra ir pra proxima fase"
+                    : "Aperte ENTER pra voltar ao menu", 360, 1f, 1f);
         }
 
         batch.end();
@@ -254,9 +761,9 @@ public class GameScreen extends ScreenAdapter {
     private void escreverComSombra(String texto, float y, float tamanho, float alfa) {
         fonte.getData().setScale(2.5f * tamanho);
         fonte.setColor(0, 0, 0, alfa);
-        fonte.draw(batch, texto, 3, y - 3, HUD_W, Align.center, false);
+        fonte.draw(batch, texto, 3, y - 3, 1376, Align.center, false);
         fonte.setColor(1, 1, 1, alfa);
-        fonte.draw(batch, texto, 0, y, HUD_W, Align.center, false);
+        fonte.draw(batch, texto, 0, y, 1376, Align.center, false);
         fonte.setColor(Color.WHITE);
     }
 
@@ -269,10 +776,10 @@ public class GameScreen extends ScreenAdapter {
     public void dispose() {
         batch.dispose();
         mapa.dispose();
-        pixel.dispose();
-        fonte.dispose();
         gato.dispose();
+        fonte.dispose();
         fantasma.dispose();
-        for (Coletavel c : fase.coletaveis) c.dispose();
+        pixel.dispose();
+        texColetavel.dispose();
     }
 }
