@@ -3,12 +3,15 @@ cutscene/cena2.jpeg
 cutscene/cena3.jpeg
 cutscene/cena4.png
 cutscene/cena5.png
-cutscene/cena5_antes.jpeg
 cutscene/jardim.jpeg
 fantasminha.png
 gato_andando.png
+gato_parkour.png
+itens/cristal_estrela.png
 libgdx.png
 mapas/mapa1.png
+mapas/mapa2.png
+mapas/mapa3.jpeg
 menu/Fundo_menu.jpeg
 menu/Lavlor.png
 menu/audio/click.mp3

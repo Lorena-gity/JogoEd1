@@ -124,7 +124,7 @@ public class MenuScreen extends ScreenAdapter {
                 Gdx.app.exit();
                 break;
             case "jogar":
-                game.setScreen(new CutsceneScreen(game));
+                game.setScreen(new NomeScreen(game));
                 break;
             default:
                 System.out.println("Clicou em " + NOMES[i]); // ainda não existe essa tela
