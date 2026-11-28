@@ -1,5 +1,4 @@
 package com.ed1.jogo;
-
 import com.badlogic.gdx.Gdx;
 import com.badlogic.gdx.ScreenAdapter;
 import com.badlogic.gdx.graphics.Texture;
@@ -34,11 +33,9 @@ public class MenuScreen extends ScreenAdapter {
     private final Sound somHover;
     private final Sound somClick;
 
-    // Controle do hover
-    private final boolean[] estavaSobre = new boolean[NOMES.length];
+    private final boolean[] estavaSobre = new boolean[NOMES.length]; // Controle do hover
 
-    // animação
-    private final float[] offsetY = new float[NOMES.length];
+    private final float[] offsetY = new float[NOMES.length]; // animação
     private final float[] escala = new float[NOMES.length];
     private int pressionado = -1;
 

@@ -7,11 +7,14 @@ cutscene/jardim.jpeg
 fantasminha.png
 gato_andando.png
 gato_parkour.png
-itens/cristal_estrela.png
+itens/estrela.png
+itens/flores.png
+itens/mundo.png
 libgdx.png
 mapas/mapa1.png
 mapas/mapa2.png
 mapas/mapa3.jpeg
+mapas/mapa4.png
 menu/Fundo_menu.jpeg
 menu/Lavlor.png
 menu/audio/click.mp3

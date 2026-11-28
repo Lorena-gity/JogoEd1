@@ -18,6 +18,9 @@ import com.badlogic.gdx.utils.viewport.FitViewport;
 public class GameScreen extends ScreenAdapter {
     private static final int TOTAL_FASES = 2;
 
+    // tipos de coletável pra usar nas tabelas (o valor em pontos está em TipoColetavel)
+    private static final int ESTRELA = 0, MUNDO = 1, FLORES = 2;
+
     // Plataformas: {x da esquerda, x da direita, y do TOPO}, y contado DE CIMA da imagem.
     // Com 4 números, o último é a BASE: vira um pilar sólido (bloqueia dos lados e por baixo).
     // --------------------------- FASE 1 ---------------------------
@@ -42,9 +45,14 @@ public class GameScreen extends ScreenAdapter {
     private static final float INICIO_1_X = 110;
     private static final float INICIO_1_Y = 452;
     private static final float CHEGADA_1_X = 1560;
-    // coletáveis: {x do CENTRO, y do CENTRO (contado de cima), pontos}
+    // coletáveis: {tipo, x do CENTRO, y do CHÃO onde ele fica (contado de cima, igual às plataformas)}
+    // 4 nas plataformas de baixo e só 1 lá em cima
     private static final float[][] COLETAVEIS_1 = {
-            {814, 285, 2000}, // em cima do pilar alto do meio
+            {FLORES, 273, 746},   // C (embaixo, à esquerda)
+            {ESTRELA, 742, 664},  // G (embaixo)
+            {FLORES, 1121, 666},  // I (embaixo)
+            {ESTRELA, 1399, 752}, // K (embaixo, à direita)
+            {MUNDO, 814, 330},    // E (o pilar alto do meio): o único lá em cima, vale mais
     };
 
     // --------------------------- FASE 2 ---------------------------
@@ -75,7 +83,11 @@ public class GameScreen extends ScreenAdapter {
     private static final float INICIO_2_X = 130;
     private static final float INICIO_2_Y = 392;
     private static final float CHEGADA_2_X = 1500;
-    private static final float[][] COLETAVEIS_2 = {};
+    private static final float[][] COLETAVEIS_2 = {
+            {FLORES, 915, 735},   // chão entre os pilares (embaixo)
+            {ESTRELA, 985, 735},  // chão entre os pilares (embaixo)
+            {MUNDO, 1000, 590},   // degrau baixo à esquerda do pilar 2
+    };
 
     // ---------------- LÓGICA FÍSICA ----------------
     private static final float GRAVIDADE = 1800;
@@ -113,18 +125,18 @@ public class GameScreen extends ScreenAdapter {
     private static final float ESPERA_1_Y = 338;
 
     // ---------------- COLETÁVEL ----------------
-    private static final float COLETAVEL_ALTURA = 44;
+    private static final float FOLGA_COLETAVEL = 8; // quanto ele flutua acima do chão
 
     /** Um item coletável. Só guarda dados; o GameScreen cuida do resto. */
     private static class Coletavel {
-        final float x, y; // centro, y contado DE CIMA da imagem
-        final int pontos;
+        final TipoColetavel tipo;
+        final float x, y; // x = centro, y = do CHÃO onde ele fica (contado DE CIMA da imagem)
         boolean pego = false;
 
-        Coletavel(float x, float y, int pontos) {
+        Coletavel(TipoColetavel tipo, float x, float y) {
+            this.tipo = tipo;
             this.x = x;
             this.y = y;
-            this.pontos = pontos;
         }
     }
 
@@ -162,8 +174,7 @@ public class GameScreen extends ScreenAdapter {
     private int pontos;
     private int ultimoGanho = 0;
     private float tempoGanho = 0;
-    private final Texture texColetavel;
-    private final float coletavelW;
+    private final Texture[] texColetaveis = new Texture[TipoColetavel.values().length]; // uma por tipo
     private float tempoColetavel = 0;
 
     // fantasminha + diálogo
@@ -245,9 +256,10 @@ public class GameScreen extends ScreenAdapter {
         gato.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
         quadros = TextureRegion.split(gato, CELULA_W, CELULA_H)[0];
 
-        texColetavel = new Texture("itens/cristal_estrela.png");
-        texColetavel.setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
-        coletavelW = COLETAVEL_ALTURA * texColetavel.getWidth() / texColetavel.getHeight();
+        for (TipoColetavel t : TipoColetavel.values()) {
+            texColetaveis[t.ordinal()] = new Texture(t.arquivo);
+            texColetaveis[t.ordinal()].setFilter(Texture.TextureFilter.Nearest, Texture.TextureFilter.Nearest);
+        }
 
         fonte = new BitmapFont();
         fonte.getData().setScale(2.5f);
@@ -321,7 +333,7 @@ public class GameScreen extends ScreenAdapter {
     private static ListaEncadeada<Coletavel> montarColetaveis(float[][] tabela) {
         ListaEncadeada<Coletavel> lista = new ListaEncadeada<>();
         for (float[] c : tabela) {
-            lista.adicionar(new Coletavel(c[0], c[1], (int) c[2]));
+            lista.adicionar(new Coletavel(TipoColetavel.values()[(int) c[0]], c[1], c[2]));
         }
         return lista;
     }
@@ -510,18 +522,19 @@ public class GameScreen extends ScreenAdapter {
         }
 
         // ---------- coletáveis ----------
-        for (Coletavel c : coletaveis) {
+        for (Coletavel c : coletaveis) {         // percorre a lista encadeada
             if (c.pego) continue;
-            float cy = mapaH - c.y;
+            Texture img = texColetaveis[c.tipo.ordinal()];
+            float baixo = mapaH - c.y + FOLGA_COLETAVEL;   // y (de baixo pra cima) do pé do coletável
             boolean encostou =
-                    pos.x + HITBOX_W / 2f > c.x - coletavelW / 2f
-                            && pos.x - HITBOX_W / 2f < c.x + coletavelW / 2f
-                            && pos.y + HITBOX_H > cy - COLETAVEL_ALTURA / 2f
-                            && pos.y < cy + COLETAVEL_ALTURA / 2f;
+                    pos.x + HITBOX_W / 2f > c.x - img.getWidth() / 2f
+                            && pos.x - HITBOX_W / 2f < c.x + img.getWidth() / 2f
+                            && pos.y + HITBOX_H > baixo
+                            && pos.y < baixo + img.getHeight();
             if (encostou) {
                 c.pego = true;
-                pontos += c.pontos;
-                ultimoGanho = c.pontos;
+                pontos += c.tipo.pontos;
+                ultimoGanho = c.tipo.pontos;
                 tempoGanho = 1.5f;
             }
         }
@@ -655,10 +668,10 @@ public class GameScreen extends ScreenAdapter {
         float balanco = MathUtils.sin(tempoColetavel * 3f) * 4f; // flutua devagarinho
         for (Coletavel c : coletaveis) {
             if (c.pego) continue;
-            batch.draw(texColetavel,
-                    Math.round(c.x - coletavelW / 2f),
-                    Math.round(mapaH - c.y - COLETAVEL_ALTURA / 2f + balanco),
-                    coletavelW, COLETAVEL_ALTURA);
+            Texture img = texColetaveis[c.tipo.ordinal()];
+            batch.draw(img,
+                    Math.round(c.x - img.getWidth() / 2f),
+                    Math.round(mapaH - c.y + FOLGA_COLETAVEL + balanco));
         }
     }
 
@@ -684,7 +697,7 @@ public class GameScreen extends ScreenAdapter {
         batch.setColor(Color.WHITE);
     }
 
-    /** F1: vermelho = pilar sólido, verde = topo onde o gato pousa. */
+    /** F1: vermelho = pilar sólido, verde = topo onde o gato pousa, amarelo = coletável. */
     private void desenharDebug() {
         for (Plataforma p : plataformas) {
             float w = p.x1 - p.x0;
@@ -694,6 +707,14 @@ public class GameScreen extends ScreenAdapter {
             }
             batch.setColor(0, 1, 0, 0.9f);
             batch.draw(pixel, p.x0, mapaH - p.y - 1, w, 2);
+        }
+        // amarelo = área de cada coletável
+        batch.setColor(1, 1, 0, 0.35f);
+        for (Coletavel c : coletaveis) {
+            if (c.pego) continue;
+            Texture img = texColetaveis[c.tipo.ordinal()];
+            batch.draw(pixel, c.x - img.getWidth() / 2f, mapaH - c.y + FOLGA_COLETAVEL,
+                    img.getWidth(), img.getHeight());
         }
         batch.setColor(Color.WHITE);
     }
@@ -780,6 +801,6 @@ public class GameScreen extends ScreenAdapter {
         fonte.dispose();
         fantasma.dispose();
         pixel.dispose();
-        texColetavel.dispose();
+        for (Texture t : texColetaveis) t.dispose();
     }
 }
