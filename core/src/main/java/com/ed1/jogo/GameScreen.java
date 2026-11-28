@@ -374,9 +374,13 @@ public class GameScreen extends ScreenAdapter {
                         return;
                     }
                 } else {
-                    // fase sem fala final: ENTER vai pra próxima fase (ou pro menu, se for a última)
-                    if (fase < TOTAL_FASES) game.setScreen(new GameScreen(game, fase + 1, pontos));
-                    else game.setScreen(new MenuScreen(game));
+                    // fase sem fala final: ENTER vai pra próxima fase (ou salva e vai pro menu, se for a última)
+                    if (fase < TOTAL_FASES) {
+                        game.setScreen(new GameScreen(game, fase + 1, pontos));
+                    } else {
+                        Ranking.registrar(game.nomeJogador, pontos);   // <- linha nova: salva no ranking
+                        game.setScreen(new MenuScreen(game));
+                    }
                     dispose();
                     return;
                 }

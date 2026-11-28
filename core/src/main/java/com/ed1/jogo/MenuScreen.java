@@ -123,6 +123,9 @@ public class MenuScreen extends ScreenAdapter {
             case "jogar":
                 game.setScreen(new NomeScreen(game));
                 break;
+            case "ranking":
+                game.setScreen(new RankingScreen(game));
+                break;
             default:
                 System.out.println("Clicou em " + NOMES[i]); // ainda não existe essa tela
         }

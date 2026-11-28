@@ -14,7 +14,6 @@ libgdx.png
 mapas/mapa1.png
 mapas/mapa2.png
 mapas/mapa3.jpeg
-mapas/mapa4.png
 menu/Fundo_menu.jpeg
 menu/Lavlor.png
 menu/audio/click.mp3
